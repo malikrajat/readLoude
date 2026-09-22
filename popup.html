@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Read Aloud</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    h2 {
+      margin: 0 0 15px 0;
+      font-size: 18px;
+      color: #333;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background-color 0.3s;
+    }
+    #readBtn {
+      background-color: #4CAF50;
+      color: white;
+    }
+    #readBtn:hover {
+      background-color: #45a049;
+    }
+    #pauseBtn {
+      background-color: #FF9800;
+      color: white;
+    }
+    #pauseBtn:hover {
+      background-color: #e68900;
+    }
+    #pauseBtn:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    #stopBtn {
+      background-color: #f44336;
+      color: white;
+    }
+    #stopBtn:hover {
+      background-color: #da190b;
+    }
+    #stopBtn:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    .settings {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #ddd;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 12px;
+      color: #666;
+    }
+    select, input[type="range"] {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      text-align: center;
+    }
+    .status.reading {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status.paused {
+      background-color: #fff3e0;
+      color: #e65100;
+    }
+    .status.stopped {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <h2>Read Aloud</h2>
+  
+  <div class="controls">
+    <button id="readBtn">Read</button>
+    <button id="pauseBtn" disabled>Pause</button>
+    <button id="stopBtn" disabled>Stop</button>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <div class="settings">
+    <label for="voice">Voice:</label>
+    <select id="voice"></select>
+
+    <label for="rate">Speed: <span id="rateValue">0.85</span></label>
+    <input type="range" id="rate" min="0.5" max="2" step="0.05" value="0.85">
+
+    <label for="pitch">Pitch: <span id="pitchValue">1.1</span></label>
+    <input type="range" id="pitch" min="0.5" max="2" step="0.05" value="1.1">
+    
+    <div style="margin-top: 10px; display: flex; gap: 5px; font-size: 11px;">
+      <button id="presetSlow" style="flex: 1; padding: 5px; font-size: 10px;">Slow</button>
+      <button id="presetNormal" style="flex: 1; padding: 5px; font-size: 10px;">Normal</button>
+      <button id="presetFast" style="flex: 1; padding: 5px; font-size: 10px;">Fast</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

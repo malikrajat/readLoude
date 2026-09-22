@@ -1,0 +1,50 @@
+.read-aloud-highlight {
+  background-color: #ffeb3b !important;
+  color: #000 !important;
+  padding: 3px 5px !important;
+  border-radius: 4px !important;
+  font-weight: bold !important;
+  transition: background-color 0.2s ease !important;
+  box-shadow: 0 0 10px rgba(255, 235, 59, 0.8) !important;
+  border: 2px solid #ffc107 !important;
+  display: inline !important;
+  position: relative !important;
+  z-index: 999999 !important;
+}
+
+#read-aloud-current-word {
+  background-color: #ffc107 !important;
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+#read-aloud-selection-container {
+  display: inline !important;
+  position: relative !important;
+}
+
+@keyframes pulse {
+  0% { background-color: #ffeb3b; box-shadow: 0 0 10px rgba(255,235,59,0.8); }
+  50% { background-color: #ffc107; box-shadow: 0 0 20px rgba(255,193,7,1); }
+  100% { background-color: #ffeb3b; box-shadow: 0 0 10px rgba(255,235,59,0.8); }
+}
+
+@keyframes pulse-highlight {
+  0% { 
+    background-color: rgba(255, 235, 59, 0.6);
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.8);
+  }
+  50% { 
+    background-color: rgba(255, 193, 7, 0.8);
+    box-shadow: 0 0 25px rgba(255, 193, 7, 1);
+  }
+  100% { 
+    background-color: rgba(255, 235, 59, 0.6);
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.8);
+  }
+}
+
+#read-aloud-floating-highlight {
+  position: absolute !important;
+  pointer-events: none !important;
+  z-index: 999999 !important;
+}
