@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Extension Icons</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    canvas { border: 1px solid #ccc; margin: 10px; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>Generate Read Aloud Icons</h2>
+  <p>Click the buttons below to download the icon files:</p>
+  
+  <div>
+    <canvas id="icon16" width="16" height="16"></canvas>
+    <button onclick="downloadIcon('icon16', 16)">Download 16x16</button>
+  </div>
+  
+  <div>
+    <canvas id="icon48" width="48" height="48"></canvas>
+    <button onclick="downloadIcon('icon48', 48)">Download 48x48</button>
+  </div>
+  
+  <div>
+    <canvas id="icon128" width="128" height="128"></canvas>
+    <button onclick="downloadIcon('icon128', 128)">Download 128x128</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+      
+      // Background
+      ctx.fillStyle = '#4CAF50';
+      ctx.fillRect(0, 0, size, size);
+      
+      // Speaker icon (white)
+      ctx.fillStyle = '#FFFFFF';
+      
+      // Speaker body
+      const speakerSize = size * 0.3;
+      const x = size * 0.25;
+      const y = size * 0.35;
+      
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + speakerSize * 0.4, y);
+      ctx.lineTo(x + speakerSize * 0.8, y - speakerSize * 0.3);
+      ctx.lineTo(x + speakerSize * 0.8, y + speakerSize * 0.6);
+      ctx.lineTo(x + speakerSize * 0.4, y + speakerSize * 0.3);
+      ctx.lineTo(x, y + speakerSize * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Sound waves
+      const waveX = x + speakerSize * 0.9;
+      const waveY = y + speakerSize * 0.15;
+      
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = size * 0.05;
+      ctx.lineCap = 'round';
+      
+      // First wave
+      ctx.beginPath();
+      ctx.arc(waveX, waveY, speakerSize * 0.3, -Math.PI/4, Math.PI/4);
+      ctx.stroke();
+      
+      // Second wave
+      ctx.beginPath();
+      ctx.arc(waveX, waveY, speakerSize * 0.5, -Math.PI/4, Math.PI/4);
+      ctx.stroke();
+    }
+
+    // Draw all icons
+    drawIcon(document.getElementById('icon16'), 16);
+    drawIcon(document.getElementById('icon48'), 48);
+    drawIcon(document.getElementById('icon128'), 128);
+
+    function downloadIcon(canvasId, size) {
+      const canvas = document.getElementById(canvasId);
+      canvas.toBlob(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `icon${size}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+  </script>
+</body>
+</html>
