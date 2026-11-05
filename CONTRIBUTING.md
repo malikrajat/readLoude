@@ -27,6 +27,12 @@ npm run create    # clean build into dist/
 
 Both must pass. `npm run verify` is what the GitHub workflow runs.
 
+CI itself runs on `main` only, and releases are cut from tags whose commit is on
+`main`. That means a push to your branch will not start a run — open the repo's
+Actions tab after merging, or run `npm run verify` locally before you push. The
+full rules, and how to change them, are in
+[BRANCH-RULES.md](BRANCH-RULES.md).
+
 ## Linting and formatting
 
 Biome does both. Run `npm run lint:fix` before you push; CI runs `npm run lint`

@@ -32,8 +32,15 @@ First public release.
   voice choice, error messages) moved out of the two entry points so it can be
   unit tested and shared.
 - `.github/workflows/ci.yml` runs lint, manifest, listing, tests (on Node 20, 22
-  and 24) and the build as separate jobs, and uploads both artifacts.
-  `.github/workflows/release.yml` publishes a GitHub Release from a `v*` tag.
+  and 24) and the build as separate jobs. It stores nothing: no Actions
+  artifact, no file attached anywhere, and the build output only exists for the
+  duration of the run. `.github/workflows/release.yml` verifies a `v*` tag
+  against `manifest.json` and builds the package, also without storing it.
+- The workflows run on `main` only, and a release tag is accepted only when its
+  commit is on `main` — a tag cut from a side branch fails fast. A `guard` job
+  enforces this and every other job depends on it, so nothing runs from a
+  disallowed ref. See [BRANCH-RULES.md](BRANCH-RULES.md) for the rules and for
+  exactly what to edit if that ever needs to change.
 - `docs/chrome-web-store-compliance.md` — every applicable policy page mapped to
   the file that satisfies it, with the date it was checked.
 - `CONTRIBUTING.md`, `SECURITY.md`, `docs/README.md`, `.editorconfig` and a

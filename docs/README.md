@@ -13,6 +13,7 @@ Start here, then follow the link that matches what you are doing.
 | Contribute code, tests or artwork | [../CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Report a security issue | [../SECURITY.md](../SECURITY.md) |
 | See what changed between versions | [../CHANGELOG.md](../CHANGELOG.md) |
+| Change which branches may run the GitHub Actions | [../BRANCH-RULES.md](../BRANCH-RULES.md) |
 
 ## Map of the repository
 
@@ -49,7 +50,8 @@ docs/chrome-web-store-compliance.md   Policy-by-policy compliance
 biome.json                      Linter and formatter configuration
 test-page.html                  Manual test page with edge cases
 .github/workflows/ci.yml        Lint, manifest, listing, tests, build
-.github/workflows/release.yml   Tag-driven release with the package attached
+.github/workflows/release.yml   Tag check: verify, build, version match
+BRANCH-RULES.md                 Which branches and tags may run the workflows
 ```
 
 ## Command reference
