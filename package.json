@@ -1,0 +1,67 @@
+{
+  "name": "read-aloud-with-highlight",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that reads a page, or just the text you selected, aloud with word-by-word highlighting.",
+  "license": "MIT",
+  "author": "Rajat Malik",
+  "homepage": "https://github.com/malikrajat/readLoude#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/malikrajat/readLoude.git"
+  },
+  "bugs": {
+    "url": "https://github.com/malikrajat/readLoude/issues",
+    "email": "support@rajatmalik.dev"
+  },
+  "keywords": [
+    "chrome-extension",
+    "chrome-web-store",
+    "manifest-v3",
+    "text-to-speech",
+    "tts",
+    "read-aloud",
+    "read-aloud-extension",
+    "speech-synthesis",
+    "speechsynthesis",
+    "accessibility",
+    "a11y",
+    "dyslexia",
+    "screen-reader",
+    "reader",
+    "article-reader",
+    "highlight",
+    "highlight-words",
+    "offline",
+    "privacy-first",
+    "no-tracking",
+    "vanilla-javascript",
+    "no-dependencies"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "test": "node scripts/test.js",
+    "check": "node scripts/verify.js",
+    "check:listing": "node scripts/check-listing.js",
+    "build": "node scripts/build.js",
+    "build:zip": "node scripts/build.js --no-unpacked",
+    "build:unpacked": "node scripts/build.js --no-zip",
+    "create": "npm run clean && npm run build",
+    "clean": "node scripts/clean.js",
+    "verify": "npm run lint && npm run check && npm run check:listing && npm test",
+    "ci": "npm run verify",
+    "release": "npm run ci && npm run build",
+    "icons": "python tools/generate-icons.py",
+    "store-assets": "python tools/generate-store-assets.py",
+    "assets": "npm run icons && npm run store-assets"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14"
+  }
+}

@@ -1,413 +1,478 @@
-let isReading = false;
-let isPaused = false;
+/* Read Aloud with Highlight - popup controller.
+   The popup only talks to the content script in the active tab; it never reads
+   or sends page content anywhere. */
 
-const readBtn = document.getElementById('readBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const stopBtn = document.getElementById('stopBtn');
-const voiceSelect = document.getElementById('voice');
-const rateInput = document.getElementById('rate');
-const pitchInput = document.getElementById('pitch');
-const rateValue = document.getElementById('rateValue');
-const pitchValue = document.getElementById('pitchValue');
-const statusDiv = document.getElementById('status');
+// Pure helpers shared with the content script (see lib/core.js).
+const core = window.ReadAloudCore;
 
-// Load saved settings with better defaults for Indian English
-function loadSettings() {
-  chrome.storage.sync.get(['voiceIndex', 'rate', 'pitch'], (result) => {
-    if (result.voiceIndex !== undefined) {
-      voiceSelect.value = result.voiceIndex;
-    } else {
-      // Important: We MUST use localService === true (offline voices). 
-      // Online/Neural voices (like Google's) do NOT support word highlighting (onboundary events)
-      // and they instantly crash on long paragraphs, which was disabling the popup buttons!
-      const voices = speechSynthesis.getVoices();
-      
-      // 1. Priority: Local/Offline Indian Male voice (Microsoft Ravi, Apple Rishi)
-      let bestVoiceIndex = voices.findIndex(v => 
-        v.localService === true && 
-        (v.lang.includes('en-IN') || v.name.toLowerCase().includes('india')) &&
-        (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('ravi') || v.name.toLowerCase().includes('rishi'))
-      );
-      
-      // 2. Fallback: Any Local Indian voice
-      if (bestVoiceIndex === -1) {
-        bestVoiceIndex = voices.findIndex(v => 
-          v.localService === true && 
-          (v.lang.includes('en-IN') || v.name.toLowerCase().includes('india'))
-        );
-      }
-      
-      // 3. Fallback: Local English Male voice
-      if (bestVoiceIndex === -1) {
-        bestVoiceIndex = voices.findIndex(v => 
-          v.localService === true && 
-          v.lang.includes('en') &&
-          (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('mark'))
-        );
-      }
-      
-      // 4. Final Fallback: Any local voice
-      if (bestVoiceIndex === -1) {
-        bestVoiceIndex = voices.findIndex(v => v.localService === true);
-      }
+// chrome.storage has a write quota (about 120 writes per minute), so slider
+// movements are batched before anything is written.
+const SAVE_DEBOUNCE_MS = 400;
+const INJECTION_SETTLE_MS = 200;
+const DEFAULTS = { rate: 0.85, pitch: 1 };
 
-      if (bestVoiceIndex !== -1) {
-        voiceSelect.value = bestVoiceIndex;
-      }
-    }
-    
-    if (result.rate !== undefined) {
-      rateInput.value = result.rate;
-      rateValue.textContent = result.rate;
-    } else {
-      // Slightly slower speed for clearer, easier to understand pronunciation
-      rateInput.value = 0.85;
-      rateValue.textContent = '0.85';
-    }
-    
-    if (result.pitch !== undefined) {
-      pitchInput.value = result.pitch;
-      pitchValue.textContent = result.pitch;
-    } else {
-      // Default pitch of 1.0 sounds most human and least robotic
-      pitchInput.value = 1.0;
-      pitchValue.textContent = '1.0';
-    }
-    checkVoiceCapabilities();
-  });
+const els = {
+  readBtn: document.getElementById('readBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  voice: document.getElementById('voice'),
+  rate: document.getElementById('rate'),
+  rateValue: document.getElementById('rateValue'),
+  pitch: document.getElementById('pitch'),
+  pitchValue: document.getElementById('pitchValue'),
+  status: document.getElementById('status'),
+  hint: document.getElementById('hint'),
+  voiceWarning: document.getElementById('voiceWarning'),
+  presetSlow: document.getElementById('presetSlow'),
+  presetNormal: document.getElementById('presetNormal'),
+  presetFast: document.getElementById('presetFast')
+};
+
+const state = {
+  isReading: false,
+  isPaused: false
+};
+
+let voices = [];
+let saveTimer = null;
+
+// Storage helpers ------------------------------------------------------------
+
+function storageArea() {
+  // storage.sync needs a signed-in profile in rare setups; local always works.
+  if (chrome.storage?.sync) return chrome.storage.sync;
+  return chrome.storage.local;
 }
 
-// Check if voice supports highlighting
-function checkVoiceCapabilities() {
-  const voices = speechSynthesis.getVoices();
-  const selectedVoice = voices[voiceSelect.value];
-  const warningDiv = document.getElementById('voice-warning');
-  
-  if (selectedVoice && !selectedVoice.localService) {
-    if (!warningDiv) {
-      const div = document.createElement('div');
-      div.id = 'voice-warning';
-      div.style.color = '#e65100';
-      div.style.backgroundColor = '#fff3e0';
-      div.style.padding = '5px';
-      div.style.borderRadius = '3px';
-      div.style.fontSize = '11px';
-      div.style.marginTop = '8px';
-      div.textContent = '⚠ Online voice selected. Word highlighting is disabled by the browser.';
-      voiceSelect.parentNode.insertBefore(div, voiceSelect.nextSibling);
-    }
-  } else {
-    if (warningDiv) {
-      warningDiv.remove();
-    }
+async function readStoredSettings() {
+  try {
+    return (await storageArea().get(['voiceName', 'voiceIndex', 'rate', 'pitch'])) || {};
+  } catch (e) {
+    console.warn('[Read Aloud] Could not read the saved settings:', e);
+    return {};
   }
 }
 
-// Save settings
-function saveSettings() {
-  chrome.storage.sync.set({
-    voiceIndex: voiceSelect.value,
-    rate: rateInput.value,
-    pitch: pitchInput.value
-  });
+async function writeStoredSettings() {
+  try {
+    await storageArea().set({
+      voiceName: selectedVoiceName(),
+      voiceIndex: els.voice.value,
+      rate: els.rate.value,
+      pitch: els.pitch.value
+    });
+  } catch (e) {
+    // Quota, sync-disabled or extension reload: never break the popup for this.
+    console.warn('[Read Aloud] Could not save the settings:', e);
+  }
 }
 
-// Load voices
-function loadVoices() {
-  const voices = speechSynthesis.getVoices();
-  voiceSelect.innerHTML = '';
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    writeStoredSettings();
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function flushSave() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  writeStoredSettings();
+}
+
+// Voices ---------------------------------------------------------------------
+
+function getVoices() {
+  try {
+    return speechSynthesis.getVoices() || [];
+  } catch (_e) {
+    return [];
+  }
+}
+
+function selectedVoice() {
+  const index = Number(els.voice.value);
+  return voices[index] || null;
+}
+
+function selectedVoiceName() {
+  const voice = selectedVoice();
+  return voice ? voice.name : '';
+}
+
+function renderVoices() {
+  voices = getVoices();
+
+  els.voice.innerHTML = '';
+
+  if (voices.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Browser default voice';
+    els.voice.appendChild(option);
+    els.voice.disabled = true;
+    return;
+  }
+
+  els.voice.disabled = false;
   voices.forEach((voice, index) => {
     const option = document.createElement('option');
-    option.value = index;
-    option.textContent = `${voice.name} (${voice.lang})`;
-    voiceSelect.appendChild(option);
+    option.value = String(index);
+    option.textContent =
+      voice.name + ' (' + voice.lang + ')' + (voice.localService ? '' : ' - online');
+    els.voice.appendChild(option);
   });
-  loadSettings();
 }
 
-speechSynthesis.onvoiceschanged = loadVoices;
-loadVoices();
+function updateVoiceWarning() {
+  const voice = selectedVoice();
+  const show = Boolean(voice && voice.localService !== true);
 
-// Update rate and pitch display
-rateInput.addEventListener('input', () => {
-  rateValue.textContent = rateInput.value;
-  saveSettings();
-});
-
-pitchInput.addEventListener('input', () => {
-  pitchValue.textContent = pitchInput.value;
-  saveSettings();
-});
-
-voiceSelect.addEventListener('change', () => {
-  saveSettings();
-  checkVoiceCapabilities();
-});
-
-// Preset buttons for easy adjustment
-document.getElementById('presetSlow').addEventListener('click', () => {
-  rateInput.value = 0.8;
-  pitchInput.value = 1.0;
-  rateValue.textContent = '0.8';
-  pitchValue.textContent = '1.0';
-  saveSettings();
-});
-
-document.getElementById('presetNormal').addEventListener('click', () => {
-  rateInput.value = 0.95;
-  pitchInput.value = 1.0;
-  rateValue.textContent = '0.95';
-  pitchValue.textContent = '1.0';
-  saveSettings();
-});
-
-document.getElementById('presetFast').addEventListener('click', () => {
-  rateInput.value = 1.1;
-  pitchInput.value = 1.0;
-  rateValue.textContent = '1.1';
-  pitchValue.textContent = '1.0';
-  saveSettings();
-});
-
-// Update status display
-function updateStatus(status) {
-  statusDiv.className = 'status ' + status;
-  switch(status) {
-    case 'reading':
-      statusDiv.textContent = '🔊 Reading...';
-      break;
-    case 'paused':
-      statusDiv.textContent = '⏸️ Paused';
-      break;
-    case 'stopped':
-      statusDiv.textContent = '⏹️ Stopped';
-      break;
-    default:
-      statusDiv.textContent = '';
-      statusDiv.className = 'status';
-  }
+  els.voiceWarning.classList.toggle('hidden', !show);
+  els.voiceWarning.textContent = show
+    ? 'This is an online voice: word highlighting will not work and long text may stop early. A voice without "(online)" is recommended.'
+    : '';
 }
 
-// Read button
-readBtn.addEventListener('click', async () => {
-  if (isPaused) {
-    // Resume reading
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'resume' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.log('Error:', chrome.runtime.lastError.message);
-          return;
-        }
-      });
-    });
-    isPaused = false;
-    isReading = true;
-    readBtn.textContent = 'Read';
-    pauseBtn.textContent = 'Pause';
-    pauseBtn.disabled = false;
-    stopBtn.disabled = false;
-    updateStatus('reading');
-  } else {
-    // Start reading
-    const voices = speechSynthesis.getVoices();
-    const selectedVoice = voices[voiceSelect.value];
-    
-    const settings = {
-      voice: selectedVoice ? selectedVoice.name : null,
-      rate: parseFloat(rateInput.value),
-      pitch: parseFloat(pitchInput.value)
-    };
+// UI helpers -----------------------------------------------------------------
 
-    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      const tab = tabs[0];
-      
-      // Check if we can inject scripts on this page
-      if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('edge://')) {
-        updateStatus('');
-        alert('Cannot read on browser internal pages.\nTry on a regular webpage like:\n• News sites\n• Blogs\n• Articles');
-        return;
-      }
-      
-      // First, capture the selection before it's lost
-      const captureSelection = async () => {
-        try {
-          const result = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => {
-              const sel = window.getSelection();
-              if (!sel || sel.rangeCount === 0) return null;
-              const range = sel.getRangeAt(0);
-              return {
-                text: sel.toString(),
-                startContainer: range.startContainer.nodeType === Node.TEXT_NODE ? 
-                  range.startContainer.textContent : null,
-                startOffset: range.startOffset,
-                endOffset: range.endOffset
-              };
-            }
-          });
-          return result && result[0] && result[0].result;
-        } catch (e) {
-          console.error('Could not capture selection:', e);
-          return null;
-        }
-      };
-      
-      const selectionData = await captureSelection();
-      console.log('Selection data:', selectionData);
-      
-      // Try to send message first
-      const tryMessage = () => {
-        return new Promise((resolve) => {
-          chrome.tabs.sendMessage(tab.id, { 
-            action: 'read', 
-            settings: settings,
-            selectionData: selectionData
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              resolve(false);
-            } else {
-              resolve(response && response.success);
-            }
-          });
-        });
-      };
-      
-      let success = await tryMessage();
-      console.log('First message attempt:', success);
-      
-      // If failed, try to inject the scripts manually
-      if (!success) {
-        console.log('Attempting manual injection...');
-        try {
-          // Inject content script
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ['content.js']
-          });
-          console.log('Content script injected');
-          
-          // Inject CSS
-          await chrome.scripting.insertCSS({
-            target: { tabId: tab.id },
-            files: ['content.css']
-          });
-          console.log('CSS injected');
-          
-          // Wait a moment for initialization
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Try again
-          success = await tryMessage();
-          console.log('Second message attempt:', success);
-        } catch (e) {
-          console.error('Injection failed:', e);
-          updateStatus('');
-          alert('Error: ' + e.message + '\n\nFor file:// URLs:\n1. Go to chrome://extensions\n2. Find this extension\n3. Enable "Allow access to file URLs"');
-          return;
-        }
-      }
-      
-      if (success) {
-        isReading = true;
-        pauseBtn.disabled = false;
-        stopBtn.disabled = false;
-        updateStatus('reading');
-      } else {
-        updateStatus('');
-        alert('Could not start reading.\n\nTroubleshooting:\n1. Check browser console (F12) for errors\n2. Refresh the page (F5)\n3. Select text again\n4. For file:// URLs, enable "Allow access to file URLs" in chrome://extensions');
-      }
-    });
+function showHint(message) {
+  if (!message) {
+    els.hint.classList.add('hidden');
+    els.hint.textContent = '';
+    return;
   }
-});
+  els.hint.textContent = message;
+  els.hint.classList.remove('hidden');
+}
 
-// Pause button
-pauseBtn.addEventListener('click', () => {
-  if (isPaused) {
-    // Resume
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'resume' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.log('Error:', chrome.runtime.lastError.message);
-          return;
-        }
-      });
-    });
-    isPaused = false;
-    pauseBtn.textContent = 'Pause';
-    updateStatus('reading');
-  } else {
-    // Pause
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'pause' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.log('Error:', chrome.runtime.lastError.message);
-          return;
-        }
-      });
-    });
-    isPaused = true;
-    pauseBtn.textContent = 'Resume';
-    updateStatus('paused');
-  }
-});
+function updateStatus(kind) {
+  const labels = { reading: 'Reading...', paused: 'Paused', stopped: 'Stopped' };
+  els.status.className = 'status ' + (kind || '');
+  els.status.textContent = kind ? labels[kind] || '' : '';
+}
 
-// Stop button
-stopBtn.addEventListener('click', () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.tabs.sendMessage(tabs[0].id, { action: 'stop' }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.log('Error:', chrome.runtime.lastError.message);
-        return;
-      }
-    });
-  });
-  isReading = false;
-  isPaused = false;
-  readBtn.textContent = 'Read';
-  pauseBtn.textContent = 'Pause';
-  pauseBtn.disabled = true;
-  stopBtn.disabled = true;
+function applyButtonState() {
+  els.pauseBtn.textContent = state.isPaused ? 'Resume' : 'Pause';
+  els.pauseBtn.disabled = !state.isReading;
+  els.stopBtn.disabled = !state.isReading;
+  els.status.className =
+    'status ' + (state.isReading ? (state.isPaused ? 'paused' : 'reading') : '');
+  els.status.textContent = state.isReading ? (state.isPaused ? 'Paused' : 'Reading...') : '';
+}
+
+function setReading(reading, paused) {
+  state.isReading = Boolean(reading);
+  state.isPaused = Boolean(paused);
+  applyButtonState();
+}
+
+function showStoppedBriefly() {
+  setReading(false, false);
   updateStatus('stopped');
-  setTimeout(() => updateStatus(''), 2000);
-});
+  setTimeout(() => {
+    if (!state.isReading) updateStatus('');
+  }, 2000);
+}
 
-// Listen for messages from content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'readingComplete') {
-    isReading = false;
-    isPaused = false;
-    readBtn.textContent = 'Read';
-    pauseBtn.textContent = 'Pause';
-    pauseBtn.disabled = true;
-    stopBtn.disabled = true;
-    updateStatus('stopped');
-    setTimeout(() => updateStatus(''), 2000);
-    return false; // No async response needed
+// Tabs and messaging ---------------------------------------------------------
+
+async function getActiveTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs?.[0] ? tabs[0] : null;
+  } catch (e) {
+    console.warn('[Read Aloud] Could not query the active tab:', e);
+    return null;
   }
-  return false;
-});
+}
 
-// On popup load, check if currently reading
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-  if (tabs[0]) {
-    chrome.tabs.sendMessage(tabs[0].id, { action: 'getStatus' }, (response) => {
-      if (chrome.runtime.lastError) {
-        return;
-      }
-      if (response && response.isReading) {
-        isReading = true;
-        isPaused = response.isPaused;
-        pauseBtn.disabled = false;
-        stopBtn.disabled = false;
-        if (isPaused) {
-          pauseBtn.textContent = 'Resume';
-          updateStatus('paused');
-        } else {
-          pauseBtn.textContent = 'Pause';
-          updateStatus('reading');
-        }
+/** Sends a message to the content script. Returns null when it is not there. */
+async function sendToTab(tabId, message) {
+  try {
+    return (await chrome.tabs.sendMessage(tabId, message)) || null;
+  } catch (_e) {
+    return null; // No receiver: the content script is not injected yet
+  }
+}
+
+async function captureSelection(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return null;
+        const range = selection.getRangeAt(0);
+        return {
+          text: selection.toString(),
+          startContainer:
+            range.startContainer.nodeType === Node.TEXT_NODE
+              ? range.startContainer.textContent
+              : null,
+          startOffset: range.startOffset,
+          endOffset: range.endOffset
+        };
       }
     });
+    return results?.[0] ? results[0].result : null;
+  } catch (e) {
+    console.warn('[Read Aloud] Could not capture the selection:', e);
+    return null;
   }
+}
+
+async function injectContentScripts(tabId) {
+  try {
+    // lib/core.js must be injected before content.js, exactly like in the manifest.
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ['lib/core.js', 'content.js']
+    });
+    await chrome.scripting.insertCSS({ target: { tabId: tabId }, files: ['content.css'] });
+    await new Promise((resolve) => setTimeout(resolve, INJECTION_SETTLE_MS));
+    return true;
+  } catch (e) {
+    console.warn('[Read Aloud] Could not inject the content script:', e);
+    showHint(
+      'This page could not be opened for reading (' +
+        e.message +
+        '). ' +
+        'For local files, enable "Allow access to file URLs" on the extension card in chrome://extensions.'
+    );
+    return false;
+  }
+}
+
+// Settings -------------------------------------------------------------------
+
+function applyRate(value) {
+  els.rate.value = String(value);
+  els.rateValue.textContent = String(value);
+}
+
+function applyPitch(value) {
+  els.pitch.value = String(value);
+  els.pitchValue.textContent = String(value);
+}
+
+async function restoreSettings() {
+  const stored = await readStoredSettings();
+
+  // Voices are matched by name: their order can change between sessions.
+  let voiceIndex = -1;
+  if (stored.voiceName) {
+    voiceIndex = core.findVoiceIndexByName(voices, stored.voiceName);
+  } else if (stored.voiceIndex !== undefined && stored.voiceIndex !== '') {
+    const legacyIndex = Number(stored.voiceIndex);
+    if (Number.isInteger(legacyIndex) && legacyIndex >= 0 && legacyIndex < voices.length) {
+      voiceIndex = legacyIndex; // Settings saved by an older version
+    }
+  }
+  if (voiceIndex === -1) voiceIndex = core.findDefaultVoiceIndex(voices);
+  if (voices.length) els.voice.value = String(voiceIndex);
+
+  const storedRate = parseFloat(stored.rate);
+  applyRate(Number.isFinite(storedRate) ? storedRate : DEFAULTS.rate);
+
+  const storedPitch = parseFloat(stored.pitch);
+  applyPitch(Number.isFinite(storedPitch) ? storedPitch : DEFAULTS.pitch);
+
+  updateVoiceWarning();
+}
+
+function currentSettings() {
+  return {
+    voice: selectedVoiceName() || null,
+    rate: parseFloat(els.rate.value) || DEFAULTS.rate,
+    pitch: parseFloat(els.pitch.value) || DEFAULTS.pitch
+  };
+}
+
+// Actions --------------------------------------------------------------------
+
+async function startReading() {
+  const tab = await getActiveTab();
+  if (!tab || typeof tab.id !== 'number') {
+    showHint('No active tab found.');
+    return;
+  }
+
+  const blocked = core.blockedPageReason(tab.url);
+  if (blocked) {
+    showHint(blocked);
+    return;
+  }
+
+  showHint('');
+  const settings = currentSettings();
+  const selectionData = await captureSelection(tab.id);
+
+  let response = await sendToTab(tab.id, {
+    action: 'read',
+    settings: settings,
+    selectionData: selectionData
+  });
+
+  if (!response) {
+    // The page was already open before the extension was installed.
+    const injected = await injectContentScripts(tab.id);
+    if (!injected) return;
+    response = await sendToTab(tab.id, {
+      action: 'read',
+      settings: settings,
+      selectionData: selectionData
+    });
+  }
+
+  if (response?.success) {
+    setReading(true, false);
+    return;
+  }
+
+  showHint(core.messageForErrorCode(response ? response.error : undefined));
+}
+
+async function togglePause() {
+  const tab = await getActiveTab();
+  if (!tab || typeof tab.id !== 'number') return;
+
+  const action = state.isPaused ? 'resume' : 'pause';
+  const response = await sendToTab(tab.id, { action: action });
+
+  if (response?.success) {
+    setReading(true, action === 'pause');
+  } else if (response === null) {
+    setReading(false, false);
+    showHint('The page changed. Select the text again and press Read.');
+  }
+}
+
+async function stopReading() {
+  const tab = await getActiveTab();
+  if (tab && typeof tab.id === 'number') {
+    await sendToTab(tab.id, { action: 'stop' });
+  }
+  showStoppedBriefly();
+  showHint('');
+}
+
+async function refreshStatus() {
+  const tab = await getActiveTab();
+  if (!tab || typeof tab.id !== 'number') {
+    showHint('No active tab found.');
+    return;
+  }
+
+  const blocked = core.blockedPageReason(tab.url);
+  if (blocked) {
+    els.readBtn.disabled = true;
+    showHint(blocked);
+    return;
+  }
+
+  els.readBtn.disabled = false;
+  const response = await sendToTab(tab.id, { action: 'getStatus' });
+  if (response?.isReading) {
+    setReading(true, Boolean(response.isPaused));
+  } else {
+    setReading(false, false);
+  }
+}
+
+// Wiring ---------------------------------------------------------------------
+
+function bindEvents() {
+  els.readBtn.addEventListener('click', () => {
+    const run = state.isPaused ? togglePause() : startReading();
+    run.catch((error) => {
+      console.error('[Read Aloud]', error);
+      showHint('Unexpected error: ' + error.message);
+    });
+  });
+
+  els.pauseBtn.addEventListener('click', () => {
+    togglePause().catch((error) => {
+      console.error('[Read Aloud]', error);
+      showHint('Unexpected error: ' + error.message);
+    });
+  });
+
+  els.stopBtn.addEventListener('click', () => {
+    stopReading().catch((error) => {
+      console.error('[Read Aloud]', error);
+    });
+  });
+
+  els.rate.addEventListener('input', () => {
+    els.rateValue.textContent = els.rate.value;
+    scheduleSave();
+  });
+
+  els.pitch.addEventListener('input', () => {
+    els.pitchValue.textContent = els.pitch.value;
+    scheduleSave();
+  });
+
+  els.voice.addEventListener('change', () => {
+    updateVoiceWarning();
+    scheduleSave();
+  });
+
+  els.presetSlow.addEventListener('click', () => applyPreset(core.PRESETS.slow));
+  els.presetNormal.addEventListener('click', () => applyPreset(core.PRESETS.normal));
+  els.presetFast.addEventListener('click', () => applyPreset(core.PRESETS.fast));
+
+  // Saving must not be lost when the popup closes right after a change.
+  window.addEventListener('pagehide', flushSave);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flushSave();
+  });
+
+  // The content script tells us when playback ends on its own.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message && message.action === 'readingComplete') {
+      showStoppedBriefly();
+    }
+    return false;
+  });
+}
+
+function applyPreset(preset) {
+  applyRate(preset.rate);
+  applyPitch(preset.pitch);
+  scheduleSave();
+}
+
+async function init() {
+  bindEvents();
+
+  renderVoices();
+  await restoreSettings();
+
+  // Voices load asynchronously in Chrome, so refresh once they are ready.
+  try {
+    speechSynthesis.addEventListener('voiceschanged', async () => {
+      const previous = selectedVoiceName();
+      renderVoices();
+      const stillThere = voices.findIndex((voice) => voice.name === previous);
+      if (stillThere !== -1) {
+        els.voice.value = String(stillThere);
+      } else {
+        await restoreSettings();
+      }
+      updateVoiceWarning();
+    });
+  } catch (e) {
+    console.warn('[Read Aloud] Could not listen for voice changes:', e);
+  }
+
+  await refreshStatus();
+}
+
+init().catch((error) => {
+  console.error('[Read Aloud] Popup failed to initialise:', error);
+  showHint('The extension could not start: ' + error.message);
 });
