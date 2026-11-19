@@ -1,0 +1,72 @@
+name: Bug report
+description: Something did not work as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The browser console output (F12) is the single most
+        useful thing you can include.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open https://...
+        2. Select a paragraph
+        3. Press Read
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      description: Shown on chrome://extensions
+      placeholder: 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 140.0.0.0 on Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: voice
+    attributes:
+      label: Voice selected in the popup
+      description: Copy the exact text shown in the Voice list
+      placeholder: Microsoft Ravi (en-IN)
+    validations:
+      required: false
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Open the page console (F12), reproduce the problem and paste anything with the [Read Aloud] prefix. Set `DEBUG = true` in content.js for more detail.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I reloaded the extension on chrome://extensions and tried again
+        - label: I checked the troubleshooting table in the README

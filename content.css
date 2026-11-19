@@ -1,3 +1,32 @@
+/* Styles injected into every page by the Read Aloud extension.
+   Everything is namespaced with .read-aloud-* / #read-aloud-* so that no page
+   style can leak in and nothing of the page is changed. */
+
+/* Word/selection highlight box drawn while reading */
+#read-aloud-floating-highlight {
+  position: absolute !important;
+  pointer-events: none !important;
+  z-index: 2147483646 !important;
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  border-bottom: 2px solid #3b82f6 !important;
+  border-radius: 2px !important;
+  box-shadow: 0 2px 5px rgba(59, 130, 246, 0.15) !important;
+  transition:
+    left 0.1s ease-out,
+    top 0.1s ease-out,
+    width 0.1s ease-out,
+    height 0.1s ease-out !important;
+}
+
+/* Used when the selected voice cannot report word boundaries */
+.read-aloud-highlight-box {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  border: 1px solid rgba(59, 130, 246, 0.5) !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+/* Highlight spans (kept for pages where a range is wrapped directly) */
 .read-aloud-highlight {
   background-color: #ffeb3b !important;
   color: #000 !important;
@@ -9,42 +38,56 @@
   border: 2px solid #ffc107 !important;
   display: inline !important;
   position: relative !important;
-  z-index: 999999 !important;
+  z-index: 2147483646 !important;
 }
 
-#read-aloud-current-word {
-  background-color: #ffc107 !important;
-  animation: pulse 0.5s ease-in-out infinite;
+/* Hidden marker that tells the highlighter where the reading started */
+#read-aloud-selection-marker {
+  display: none !important;
 }
 
-#read-aloud-selection-container {
-  display: inline !important;
-  position: relative !important;
-}
-
-@keyframes pulse {
-  0% { background-color: #ffeb3b; box-shadow: 0 0 10px rgba(255,235,59,0.8); }
-  50% { background-color: #ffc107; box-shadow: 0 0 20px rgba(255,193,7,1); }
-  100% { background-color: #ffeb3b; box-shadow: 0 0 10px rgba(255,235,59,0.8); }
-}
-
-@keyframes pulse-highlight {
-  0% { 
-    background-color: rgba(255, 235, 59, 0.6);
-    box-shadow: 0 0 15px rgba(255, 193, 7, 0.8);
-  }
-  50% { 
-    background-color: rgba(255, 193, 7, 0.8);
-    box-shadow: 0 0 25px rgba(255, 193, 7, 1);
-  }
-  100% { 
-    background-color: rgba(255, 235, 59, 0.6);
-    box-shadow: 0 0 15px rgba(255, 193, 7, 0.8);
-  }
-}
-
-#read-aloud-floating-highlight {
-  position: absolute !important;
+/* Non-blocking messages (errors, unsupported voices, ...) */
+#read-aloud-toast {
+  position: fixed !important;
+  left: 50% !important;
+  bottom: 24px !important;
+  transform: translateX(-50%) !important;
+  z-index: 2147483647 !important;
+  max-width: min(520px, 90vw) !important;
+  padding: 12px 18px !important;
+  border-radius: 10px !important;
+  background-color: rgba(17, 24, 39, 0.95) !important;
+  color: #ffffff !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1.4 !important;
+  text-align: center !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   pointer-events: none !important;
-  z-index: 999999 !important;
+  animation: read-aloud-toast-in 0.18s ease-out !important;
+}
+
+@keyframes read-aloud-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Respect users who asked for less motion */
+@media (prefers-reduced-motion: reduce) {
+  #read-aloud-floating-highlight {
+    transition: none !important;
+  }
+  #read-aloud-toast {
+    animation: none !important;
+  }
 }

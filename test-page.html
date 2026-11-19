@@ -1,76 +1,234 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test Read Aloud Extension</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 50px auto;
-      padding: 20px;
-      line-height: 1.6;
-    }
-    h1 {
-      color: #333;
-    }
-    p {
-      margin: 20px 0;
-      font-size: 16px;
-    }
-    .instructions {
-      background: #f0f0f0;
-      padding: 15px;
-      border-radius: 5px;
-      margin: 20px 0;
-    }
-  </style>
-</head>
-<body>
-  <h1>Test Page for Read Aloud Extension</h1>
-  
-  <div class="instructions">
-    <h2>How to Test:</h2>
-    <ol>
-      <li>Select any text below</li>
-      <li>Click the extension icon in your browser toolbar</li>
-      <li>Click the "Read" button</li>
-      <li>The text should be read aloud with word highlighting</li>
-    </ol>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Read Aloud with Highlight — manual test page</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        max-width: 860px;
+        margin: 40px auto;
+        padding: 0 20px 80px;
+        line-height: 1.6;
+        color: #1f2937;
+      }
+      h1 {
+        font-size: 28px;
+        margin-bottom: 4px;
+      }
+      h2 {
+        font-size: 19px;
+        margin-top: 40px;
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 6px;
+      }
+      .note {
+        background: #f3f4f6;
+        padding: 16px 20px;
+        border-radius: 8px;
+      }
+      .note ol {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .note li {
+        margin: 6px 0;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 90%;
+      }
+      .comments,
+      .sidebar {
+        background: #fafafa;
+        border-left: 3px solid #d1d5db;
+        padding: 12px 16px;
+      }
+      .good {
+        color: #15803d;
+      }
+      .bad {
+        color: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Read Aloud with Highlight — manual test page</h1>
+    <p>Load the extension unpacked, open this file, then work through the list.</p>
 
-  <h2>Sample Text</h2>
-  
-  <p>
-    The quick brown fox jumps over the lazy dog. This is a simple sentence that contains 
-    every letter of the alphabet. It's commonly used for testing fonts and keyboards.
-  </p>
+    <div class="note">
+      <strong>Checklist</strong>
+      <ol>
+        <li><strong>Selection:</strong> select one sentence below and press Read.</li>
+        <li>
+          <strong>Article mode:</strong>
+          click on empty space (no selection) and press Read. It should read from the first heading.
+        </li>
+        <li>
+          <strong>Highlighting:</strong>
+          the blue box should follow the spoken word and stay in sync.
+        </li>
+        <li>
+          <strong>Pause / Resume:</strong>
+          pause, wait, resume. It must continue from the same word.
+        </li>
+        <li>
+          <strong>Tab switch:</strong>
+          while reading, switch to another tab (it pauses), come back (it resumes).
+        </li>
+        <li>
+          <strong>Manual pause is kept:</strong>
+          pause, switch away and back. It must stay paused.
+        </li>
+        <li>
+          <strong>Stop then read again:</strong>
+          stop, then start a new selection immediately. No stray "Stopped" flash, no silence.
+        </li>
+        <li>
+          <strong>Reopen the popup</strong>
+          while reading: it should show "Reading..." and the Pause/Stop buttons enabled.
+        </li>
+        <li><strong>Long text</strong> (section 6): it must keep going past the 15 second mark.</li>
+        <li>
+          <strong>Unicode</strong>
+          (section 7): accents, emoji, right-to-left and CJK should be spoken.
+        </li>
+        <li>
+          <strong>Blocked pages:</strong>
+          try <code>chrome://extensions</code> and a new tab. The popup must explain the limitation.
+        </li>
+        <li>
+          <strong>File URL:</strong>
+          if this page was opened as <code>file://</code>, enable "Allow access to file URLs" for
+          the extension.
+        </li>
+        <li>
+          <strong>Stop leaves nothing behind:</strong>
+          after Stop, run
+          <code
+            >document.querySelectorAll('#read-aloud-selection-marker, .read-aloud-highlight,
+            #read-aloud-floating-highlight').length</code
+          >
+          in the console. It must be <code>0</code>.
+        </li>
+        <li>
+          <strong>Inline markup</strong>
+          (section 4): text split across <code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code> and
+          links must be read as one sentence.
+        </li>
+      </ol>
+    </div>
 
-  <p>
-    Technology has transformed the way we live, work, and communicate. From smartphones 
-    to artificial intelligence, innovations continue to shape our daily experiences. 
-    The digital age has brought both opportunities and challenges that we must navigate carefully.
-  </p>
+    <h2>1. Article with headings</h2>
+    <article>
+      <h3>Why reading aloud still matters</h3>
+      <p>
+        Reading silently is fast, but reading aloud is how we learn to hear the rhythm of a
+        sentence. When words are spoken, meaning arrives through pace as much as through vocabulary.
+        Studies of early readers show that listening to a text while following it on the page
+        improves both retention and pronunciation.
+      </p>
+      <p>
+        That is why a simple reading tool is useful far beyond the classroom. Long reports, dense
+        documentation and unfamiliar languages all become easier when something else does the
+        talking and the page keeps your place for you.
+      </p>
+    </article>
 
-  <p>
-    Reading is a fundamental skill that opens doors to knowledge and imagination. 
-    Through books, articles, and stories, we can explore different worlds, learn new concepts, 
-    and understand diverse perspectives. The ability to read and comprehend text is essential 
-    in today's information-rich society.
-  </p>
+    <h2>2. Short sentences for timing</h2>
+    <p>Hello world. This is a test. The extension should work perfectly.</p>
+    <p>One. Two. Three. Four. Five. Six. Seven. Eight. Nine. Ten.</p>
+    <p>Stop. Start again. Stop again. The popup must stay in sync every time.</p>
 
-  <p>
-    Select this paragraph and test the pause and resume features. You can pause the reading 
-    at any time by clicking the pause button, and then resume from where you left off. 
-    The stop button will completely stop the reading and reset everything.
-  </p>
+    <h2>3. Page without paragraphs</h2>
+    <div>
+      This whole section is built only with <em>div</em> elements, not <em>p</em> elements. The
+      article detector should still find something readable, and if it cannot, the popup must tell
+      you to select text instead of failing silently.
+    </div>
+    <ul>
+      <li>List items are readable too.</li>
+      <li>They should be spoken in order.</li>
+    </ul>
 
-  <h2>Short Sentences for Testing</h2>
-  
-  <p>Hello world. This is a test. The extension should work perfectly.</p>
-  
-  <p>One. Two. Three. Four. Five. Six. Seven. Eight. Nine. Ten.</p>
+    <h2>4. Inline markup</h2>
+    <p>
+      This sentence has <strong>bold words</strong>, <em>italic words</em>, a
+      <a href="#top">link in the middle</a>, <code>inline code</code> and a
+      <span style="color:#2563eb">coloured span</span>. The reading must not repeat or skip
+      anything, and highlighting should still track the right word.
+    </p>
 
-</body>
+    <h2>5. Noise the detector should ignore</h2>
+    <div class="comments">
+      <p>
+        This paragraph sits in a container with class <code>comments</code> and should be skipped
+        when the extension picks the main article on its own.
+      </p>
+    </div>
+    <div class="sidebar">
+      <p>This one sits in a <code>sidebar</code> container and should be skipped as well.</p>
+    </div>
+
+    <h2>6. Very long text</h2>
+    <p id="longText">Generating…</p>
+    <p>
+      A passage longer than 30,000 characters is split into parts automatically so Chrome does not
+      stop early. Highlighting should continue across the split.
+    </p>
+
+    <h2>7. Unicode, emoji and right-to-left</h2>
+    <p>
+      Accents: déjà vu, naïve, café, jalapeño, über, señor. Emoji: 😀 🎧 📚 ✅. Symbols: €, £, ₹, ½,
+      ©, —, “curly quotes”, ‘single quotes’.
+    </p>
+    <p lang="hi">हिन्दी: यह एक परीक्षण वाक्य है। इसे पढ़कर सुनाया जाना चाहिए।</p>
+    <p lang="ar" dir="rtl">العربية: هذا اختبار للقراءة بصوت عالٍ مع تمييز الكلمات.</p>
+    <p lang="he" dir="rtl">עברית: זהו מבחן הקראה עם הדגשת מילים.</p>
+    <p lang="ja">日本語：これは読み上げと単語のハイライトのテストです。</p>
+
+    <h2>8. Numbers, dates and punctuation</h2>
+    <p>
+      1,234,567.89 — 12/09/2026 — 09:45 — 45% — +91 98765 43210 —
+      https://example.com/path?q=read+aloud — "quoted speech," and an ellipsis… Sentences that end
+      with a question mark? Yes. Exclamation marks too!
+    </p>
+
+    <h2>9. Nested and repeated words</h2>
+    <p>
+      The word the appears many times: the start, the middle and the end. Highlighting must follow
+      the sequence of <strong>the</strong> words in order rather than jumping back to an earlier
+      <em>the</em>
+      on the page.
+    </p>
+
+    <h2>10. Interactive elements</h2>
+    <p>
+      <input type="text" value="Editable text inside an input" size="40" />
+      <button type="button">A button</button>
+      <select>
+        <option>An option</option>
+      </select>
+    </p>
+    <p contenteditable="true" style="border:1px dashed #cbd5e1; padding:8px;">
+      This paragraph is editable. Reading from inside a contenteditable element should not break the
+      page.
+    </p>
+
+    <script>
+      // Builds a genuinely long passage so the chunking path can be tested.
+      (function buildLongText() {
+        const sentence =
+          'Reading a long passage aloud tests how the extension handles text that is far ' +
+          'larger than a single screen of content. ';
+        const target = document.getElementById('longText');
+        let text = '';
+        while (text.length < 40000) text += sentence;
+        target.textContent = text;
+      })();
+    </script>
+  </body>
 </html>

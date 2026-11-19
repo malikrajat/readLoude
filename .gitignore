@@ -1,0 +1,18 @@
+# Build output
+dist/
+*.zip
+
+# Tooling caches
+node_modules/
+.biome/
+__pycache__/
+*.pyc
+
+# Editors and OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local experiments
+.tmp-verify/
+*.local
