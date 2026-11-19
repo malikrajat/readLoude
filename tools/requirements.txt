@@ -1,0 +1,3 @@
+# Only needed to regenerate the icon set and the store images.
+# Pinned so the generated PNGs stay identical between machines.
+pillow==12.3.0

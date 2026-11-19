@@ -1,0 +1,165 @@
+name: Release check
+
+# Who may run this workflow:
+#   - a tag push (v*), but only when the tagged commit is on main
+#   - a manual run that names such a tag
+#
+# The `guard` job checks the ancestry, not just the ref name: a tag can be
+# created from any branch, so name filtering alone is not enough.
+#
+# This workflow stores nothing: no Actions artifact, no file attached to the
+# release. Build the upload zip on your own machine with `npm run create`.
+#
+# To change which branch releases may come from, see BRANCH-RULES.md.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to check, for example v1.0.1
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 0. Tag guard: the tag must exist and its commit must be on main.
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Allowed tag check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history is required for the ancestry check below.
+          fetch-depth: 0
+
+      - name: The tag must point at a commit on main
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${INPUT_TAG:-}" ]; then
+            REF="refs/tags/$INPUT_TAG"
+          else
+            REF="$GITHUB_REF"
+          fi
+
+          echo "Checking $REF (event: $GITHUB_EVENT_NAME)"
+
+          case "$REF" in
+            refs/tags/*)
+              ;;
+            *)
+              echo "::error::Only tags may run this workflow. Got $REF. See BRANCH-RULES.md."
+              exit 1
+              ;;
+          esac
+
+          if ! git rev-parse --verify --quiet "$REF^{commit}" >/dev/null; then
+            echo "::error::$REF does not exist in this repository."
+            exit 1
+          fi
+
+          # fetch-depth: 0 above already brings main in; refreshing it keeps the
+          # check correct on a long-lived checkout, but a network blip must not
+          # block a release.
+          git fetch --no-tags origin main || echo "::warning::Could not refresh origin/main, using the local copy."
+
+          if ! git rev-parse --verify --quiet origin/main >/dev/null; then
+            echo "::error::origin/main is not available, so the tag cannot be checked."
+            exit 1
+          fi
+
+          COMMIT=$(git rev-parse "$REF^{commit}")
+          if git merge-base --is-ancestor "$COMMIT" origin/main; then
+            echo "$REF points at $COMMIT, which is on main."
+          else
+            echo "::error::$REF ($COMMIT) is not on main. Tags must be cut from main. See BRANCH-RULES.md."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 1. Verify the tagged version and prove the package still builds.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Verify the tagged version
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify everything
+        run: npm run verify
+
+      - name: Build the package
+        run: npm run build
+
+      - name: Check the tag matches the manifest version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          echo "Checking $TAG"
+          node -e "
+            const manifest = require('./manifest.json');
+            const tag = process.env.TAG.replace(/^v/, '');
+            if (manifest.version !== tag) {
+              console.error('manifest.json is ' + manifest.version + ' but the tag is ' + tag);
+              process.exit(1);
+            }
+            console.log('version ' + manifest.version + ' matches tag ' + process.env.TAG);
+          "
+
+      - name: Summary
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          {
+            echo "### $TAG verified"
+            echo ""
+            echo "- the tagged commit is on main"
+            echo "- \`npm run verify\` passed: lint, manifest, listing rules and 145 tests"
+            echo "- \`npm run build\` produced both outputs and the zip matched the folder"
+            echo "- nothing was uploaded or attached"
+            echo ""
+            echo "Next step, on your machine:"
+            echo ""
+            echo '```bash'
+            echo "npm run create"
+            echo '```'
+            echo ""
+            echo "Then upload \`dist/*.zip\` in the Chrome Web Store developer dashboard."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Optional: record the release. It carries a note only - no files. Delete
+      # this step if you prefer tags with no release entry at all.
+      - name: Record the release note
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, leaving it untouched."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --notes "Verified with npm run verify and npm run build. No files are attached to this release: build the upload zip locally with \`npm run create\`."

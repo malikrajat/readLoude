@@ -1,0 +1,228 @@
+name: CI
+
+# Who may run this workflow:
+#   - pushes to main
+#   - manual runs from main
+# Nothing else. The `guard` job below is the enforcement point, and every other
+# job needs it, so a run from any other branch stops before doing any work.
+#
+# To allow another branch, or pull requests, see BRANCH-RULES.md in the root.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One run per branch: a new push cancels the previous, still-running one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 0. Branch guard. Everything else depends on this, so the only way past it
+  #    is a push to main (or a manual run from main).
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Allowed ref check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only main may run this workflow
+        run: |
+          set -euo pipefail
+          echo "Triggered by: $GITHUB_REF (event: $GITHUB_EVENT_NAME)"
+          case "$GITHUB_REF" in
+            refs/heads/main)
+              echo "On main: allowed."
+              ;;
+            *)
+              echo "::error::This workflow runs on main only. Got $GITHUB_REF. See BRANCH-RULES.md."
+              exit 1
+              ;;
+          esac
+
+  # ---------------------------------------------------------------------------
+  # 1. Code style: Biome lints, formats and checks every JS, JSON, CSS and HTML
+  #    file listed in biome.json.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint and format
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install the toolchain
+        run: npm ci
+
+      - name: Biome (lint + format + safe fixes check)
+        run: npm run lint
+
+      - name: How to fix local failures
+        if: failure()
+        run: |
+          {
+            echo "### Biome found problems"
+            echo ""
+            echo "Run this locally, then commit the result:"
+            echo ""
+            echo '```bash'
+            echo "npm run lint:fix      # apply safe fixes"
+            echo "npm run format        # rewrite formatting"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 2. Manifest module: MV3 requirements, CSP, icons, referenced files and the
+  #    popup colour-contrast check.
+  # ---------------------------------------------------------------------------
+  manifest:
+    name: Manifest and Manifest V3 rules
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate manifest.json
+        run: npm run check
+
+  # ---------------------------------------------------------------------------
+  # 3. Store listing module: description, screenshots, promo images, sizes,
+  #    transparency and the keyword-spam limit.
+  # ---------------------------------------------------------------------------
+  listing:
+    name: Chrome Web Store listing rules
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate store/listing.md and the images
+        run: npm run check:listing
+
+  # ---------------------------------------------------------------------------
+  # 4. Tests module: unit tests for lib/core.js plus behaviour tests for
+  #    content.js and popup.js, on every supported Node release.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests (Node ${{ matrix.node }})
+    needs: guard
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit and behaviour tests
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 5. Build module: builds dist/unpacked (loadable) and the store zip, then
+  #    proves the two are identical.
+  #
+  #    Nothing is uploaded anywhere: no Actions artifact, and no file attached
+  #    to a release. The build output lives only for the duration of this run.
+  #    (The only thing GitHub caches is the npm download cache, which holds
+  #    public npm packages and none of your code. Remove `cache: npm` from the
+  #    setup-node steps to turn even that off.)
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build the package
+    needs: [guard, lint, manifest, listing, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: List what was produced
+        run: |
+          ls -la dist
+          ls -la dist/unpacked
+
+      - name: Verify the zip matches the source files
+        run: |
+          cd dist && unzip -o -q ./*.zip -d extracted
+          diff -r extracted unpacked
+
+      - name: Summary
+        run: |
+          {
+            echo "### Build verified"
+            echo ""
+            echo "\`dist/unpacked/\` and the store zip were built and compared file by file."
+            echo ""
+            echo "Nothing was uploaded: this run stores no artifacts."
+            echo "Build locally with \`npm run create\` to get the files."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 6. Store images. Manual only, and it stores nothing either: it regenerates
+  #    the icons and screenshots inside the runner and checks them against the
+  #    store rules. The generators need the Segoe UI font, which only exists on
+  #    Windows, so this cannot run on the Linux jobs. Start it from the Actions
+  #    tab after changing tools/generate-store-assets.py.
+  # ---------------------------------------------------------------------------
+  assets:
+    name: Regenerate store images (manual)
+    needs: guard
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Pillow
+        run: pip install -r tools/requirements.txt
+
+      - name: Regenerate the icons and the store images
+        run: |
+          python tools/generate-icons.py
+          python tools/generate-store-assets.py
+
+      - name: Check the regenerated images against the store rules
+        run: |
+          npm ci
+          npm run check:listing
